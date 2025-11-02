@@ -2,102 +2,69 @@ name: Build Android APK
 
 on:
   push:
-    branches: ["main"]
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
-  build:
+  build-apk:
     runs-on: ubuntu-latest
+    env:
+      ANDROID_SDK_ROOT: ${{ runner.temp }}/android-sdk
+      ANDROID_NDK_ROOT: ${{ runner.temp }}/android-sdk/ndk
+      PATH: ${{ runner.temp }}/android-sdk/cmdline-tools/latest/bin:${{ runner.temp }}/android-sdk/platform-tools:$PATH
 
     steps:
-    - name: Checkout repo
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y --no-install-recommends \
-          curl unzip openjdk-17-jdk python3-pip python3-setuptools git zip wget build-essential
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
 
-    - name: Show Java version
-      run: |
-        java -version
-        echo "JAVA_HOME may be /usr/lib/jvm/java-17-openjdk-amd64"
+      - name: Cache pip
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
 
-    - name: Prepare Android SDK folders (use RUNNER_TEMP)
-      run: |
-        export ANDROID_SDK_ROOT="$RUNNER_TEMP/android-sdk"
-        mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
-        echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel buildozer cython
 
-    - name: Download Android commandline tools
-      run: |
-        export ANDROID_SDK_ROOT="$RUNNER_TEMP/android-sdk"
-        cd $RUNNER_TEMP
-        curl -fSL "https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip" -o "commandlinetools.zip"
+      - name: Download command line tools
+        run: |
+          mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
+          cd $ANDROID_SDK_ROOT/cmdline-tools
+          if [ ! -d "latest" ]; then
+            wget https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip -O cmdline-tools.zip
+            unzip -q cmdline-tools.zip
+            mv cmdline-tools latest
+          fi
 
-    - name: Unpack commandline tools
-      run: |
-        export ANDROID_SDK_ROOT="$RUNNER_TEMP/android-sdk"
-        unzip -q $RUNNER_TEMP/commandlinetools.zip -d "$ANDROID_SDK_ROOT/cmdline-tools"
-        # normalize folder to "latest"
-        if [ -d "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" ]; then
-          mv "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest"
-        else
-          mv "$ANDROID_SDK_ROOT/cmdline-tools/"* "$ANDROID_SDK_ROOT/cmdline-tools/latest" || true
-        fi
-        ls -la "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+      - name: Update PATH for sdkmanager
+        run: echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH" >> $GITHUB_ENV
 
-    - name: Add sdkmanager to PATH and accept licenses, install components
-      run: |
-        export ANDROID_SDK_ROOT="$RUNNER_TEMP/android-sdk"
-        export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
-        sdkmanager --version
-        # قبول كل التراخيص المرتبطة بالمجلد
-        yes | sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --licenses || true
-        # تثبيت الأدوات المطلوبة (عدل الأرقام إن رغبت)
-        sdkmanager --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-33" "build-tools;36.1.0" "ndk;25.2.9519653"
+      - name: Accept SDK licenses
+        run: yes | sdkmanager --licenses
 
-    - name: Create stable SDK location for Buildozer and symlink
-      run: |
-        export ANDROID_SDK_ROOT="$RUNNER_TEMP/android-sdk"
-        # مكان Buildozer المتوقّع
-        BUILDOBZER_SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
-        mkdir -p "$(dirname "$BUILDOBZER_SDK_DIR")"
-        # إن وُجد مجلد قديم نحذفه أو نزيله قبل الربط (بحرص)
-        if [ -L "$BUILDOBZER_SDK_DIR" ]; then
-          rm -f "$BUILDOBZER_SDK_DIR"
-        fi
-        if [ -d "$BUILDOBZER_SDK_DIR" ]; then
-          rm -rf "$BUILDOBZER_SDK_DIR"
-        fi
-        # أنشئ الوصلة (symlink) من المكان الذي قامنا بتثبيت SDK فيه إلى المكان الذي يتوقعه Buildozer
-        ln -s "$ANDROID_SDK_ROOT" "$BUILDOBZER_SDK_DIR"
-        echo "Created symlink: $BUILDOBZER_SDK_DIR -> $ANDROID_SDK_ROOT"
-        ls -la "$(dirname "$BUILDOBZER_SDK_DIR")"
+      - name: Install build-tools, platforms, NDK
+        run: |
+          sdkmanager "platform-tools" "platforms;android-33" "build-tools;36.1.0" "ndk;25.2.9519653"
 
-    - name: Install Python build tools
-      run: |
-        python3 -m pip install --upgrade pip
-        pip install buildozer cython==0.29.36
+      - name: Symlink SDK for Buildozer
+        run: |
+          mkdir -p ~/.buildozer/android/platform
+          ln -sfn $ANDROID_SDK_ROOT ~/.buildozer/android/platform/android-sdk
 
-    - name: Create buildozer.spec if missing
-      run: |
-        if [ ! -f buildozer.spec ]; then
-          buildozer init
-        fi
+      - name: Build APK with Buildozer
+        run: |
+          buildozer android debug
 
-    - name: Build APK (debug) with Buildozer
-      run: |
-        export ANDROID_SDK_ROOT="$RUNNER_TEMP/android-sdk"
-        export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
-        export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-        echo "Starting buildozer..."
-        buildozer -v android debug
-
-    - name: Upload APK artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: AkhiManga-apk
-        path: bin/*.apk
-        
+      - name: Upload APK
+        uses: actions/upload-artifact@v3
+        with:
+          name: apk
+          path: bin/*.apk
+          
