@@ -40,7 +40,6 @@ jobs:
         run: |
           echo "ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk" >> $GITHUB_ENV
           echo "ANDROID_NDK_ROOT=$RUNNER_TEMP/android-sdk/ndk" >> $GITHUB_ENV
-          # Add cmdline-tools and platform-tools to PATH for subsequent steps
           echo "$RUNNER_TEMP/android-sdk/cmdline-tools/latest/bin:$RUNNER_TEMP/android-sdk/platform-tools:$PATH" >> $GITHUB_PATH
 
       - name: Download Android command-line tools (if missing)
@@ -48,26 +47,21 @@ jobs:
           mkdir -p "$RUNNER_TEMP/android-sdk/cmdline-tools"
           if [ ! -d "$RUNNER_TEMP/android-sdk/cmdline-tools/latest" ]; then
             cd "$RUNNER_TEMP"
-            echo "Downloading commandlinetools..."
             curl -fSL "https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip" -o commandlinetools.zip
             unzip -q commandlinetools.zip -d "$RUNNER_TEMP/android-sdk/cmdline-tools"
-            # normalize folder name
             if [ -d "$RUNNER_TEMP/android-sdk/cmdline-tools/cmdline-tools" ]; then
               mv "$RUNNER_TEMP/android-sdk/cmdline-tools/cmdline-tools" "$RUNNER_TEMP/android-sdk/cmdline-tools/latest"
             else
               mv "$RUNNER_TEMP/android-sdk/cmdline-tools/"* "$RUNNER_TEMP/android-sdk/cmdline-tools/latest" || true
             fi
-          else
-            echo "commandlinetools already present, skipping download."
           fi
-          ls -la "$RUNNER_TEMP/android-sdk/cmdline-tools/latest" || true
 
       - name: Ensure sdkmanager and accept licenses
         env:
           ANDROID_SDK_ROOT: ${{ runner.temp }}/android-sdk
         run: |
           set -e
-          sdkmanager --version || (echo "sdkmanager not found; check previous step" && exit 1)
+          sdkmanager --version
           yes | sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --licenses || true
 
       - name: Install SDK components (platform-tools, platforms, build-tools, ndk)
@@ -75,26 +69,20 @@ jobs:
           ANDROID_SDK_ROOT: ${{ runner.temp }}/android-sdk
         run: |
           set -e
-          sdkmanager --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-33" "build-tools;36.1.0" "ndk;25.2.9519653" || true
-          echo "Installed SDK components under $ANDROID_SDK_ROOT"
-          ls -la "$ANDROID_SDK_ROOT" || true
+          sdkmanager --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-33" "build-tools;36.1.0" "ndk;25.2.9519653"
 
       - name: Symlink SDK to Buildozer expected path
         run: |
           ANDROID_SDK_ROOT="$RUNNER_TEMP/android-sdk"
           BUILDOBZER_SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
           mkdir -p "$(dirname "$BUILDOBZER_SDK_DIR")"
-          if [ -L "$BUILDOBZER_SDK_DIR" ]; then rm -f "$BUILDOBZER_SDK_DIR"; fi
-          if [ -d "$BUILDOBZER_SDK_DIR" ]; then rm -rf "$BUILDOBZER_SDK_DIR"; fi
           ln -sfn "$ANDROID_SDK_ROOT" "$BUILDOBZER_SDK_DIR"
-          echo "Symlink created: $BUILDOBZER_SDK_DIR -> $ANDROID_SDK_ROOT"
-          ls -la "$(dirname "$BUILDOBZER_SDK_DIR")"
 
       - name: Install Python build tools (buildozer, cython)
         run: |
           python -m pip install --upgrade pip
           pip install --upgrade setuptools wheel
-          pip install buildozer==1.6.5 cython==0.29.36
+          pip install buildozer==1.5.0 cython==0.29.36
 
       - name: Create buildozer.spec if missing
         run: |
@@ -107,9 +95,7 @@ jobs:
           ANDROID_SDK_ROOT: ${{ runner.temp }}/android-sdk
           JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
-          set -e
           export PATH="$RUNNER_TEMP/android-sdk/cmdline-tools/latest/bin:$RUNNER_TEMP/android-sdk/platform-tools:$PATH"
-          echo "Starting buildozer (may take many minutes)..."
           buildozer -v android debug
 
       - name: Upload APK artifact (v4)
