@@ -2,12 +2,18 @@ name: Build Android APK
 
 on:
   push:
-    branches: ["main"]
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
   build-apk:
     runs-on: ubuntu-latest
+
+    env:
+      ANDROID_SDK_ROOT: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
+      ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r25b
+      PATH: ${{ github.workspace }}/.buildozer/android/platform/android-sdk/cmdline-tools/9477386/bin:${{ github.workspace }}/.buildozer/android/platform/android-sdk/platform-tools:$PATH
 
     steps:
       - name: Checkout repository
@@ -16,95 +22,37 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: 3.10
 
-      - name: Cache Android SDK (runner temp) 
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/android-sdk
-          key: android-sdk-${{ runner.os }}-buildtools-36-ndk-25
-
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: pip-cache-${{ runner.os }}-${{ hashFiles('**/requirements.txt') }}
-
-      - name: Install apt packages
+      - name: Upgrade pip and setuptools
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            curl unzip wget openjdk-17-jdk build-essential zip
+          python -m pip install --upgrade pip setuptools wheel
 
-      - name: Export Android SDK env (runtime)
+      - name: Install Buildozer
         run: |
-          echo "ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk" >> $GITHUB_ENV
-          echo "ANDROID_NDK_ROOT=$RUNNER_TEMP/android-sdk/ndk" >> $GITHUB_ENV
-          echo "$RUNNER_TEMP/android-sdk/cmdline-tools/latest/bin:$RUNNER_TEMP/android-sdk/platform-tools:$PATH" >> $GITHUB_PATH
+          pip install --user buildozer==1.5.0 python-for-android==2025.10.2
 
-      - name: Download Android command-line tools (if missing)
+      - name: Download Android SDK cmdline-tools
         run: |
-          mkdir -p "$RUNNER_TEMP/android-sdk/cmdline-tools"
-          if [ ! -d "$RUNNER_TEMP/android-sdk/cmdline-tools/latest" ]; then
-            cd "$RUNNER_TEMP"
-            curl -fSL "https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip" -o commandlinetools.zip
-            unzip -q commandlinetools.zip -d "$RUNNER_TEMP/android-sdk/cmdline-tools"
-            if [ -d "$RUNNER_TEMP/android-sdk/cmdline-tools/cmdline-tools" ]; then
-              mv "$RUNNER_TEMP/android-sdk/cmdline-tools/cmdline-tools" "$RUNNER_TEMP/android-sdk/cmdline-tools/latest"
-            else
-              mv "$RUNNER_TEMP/android-sdk/cmdline-tools/"* "$RUNNER_TEMP/android-sdk/cmdline-tools/latest" || true
-            fi
-          fi
+          mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
+          cd $ANDROID_SDK_ROOT/cmdline-tools
+          wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
+          unzip -q cmdline-tools.zip
+          mv cmdline-tools latest
+          rm cmdline-tools.zip
 
-      - name: Ensure sdkmanager and accept licenses
-        env:
-          ANDROID_SDK_ROOT: ${{ runner.temp }}/android-sdk
+      - name: Download Android NDK r25b
         run: |
-          set -e
-          yes | sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --licenses || true
+          mkdir -p $ANDROID_NDK_HOME
+          cd $ANDROID_NDK_HOME
+          wget https://dl.google.com/android/repository/android-ndk-r25b-linux.zip -O android-ndk.zip
+          unzip -q android-ndk.zip
+          rm android-ndk.zip
 
-      - name: Install SDK components (platform-tools, platforms, build-tools, ndk)
-        env:
-          ANDROID_SDK_ROOT: ${{ runner.temp }}/android-sdk
+      - name: Accept licenses
+        run: yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
+
+      - name: Build APK
         run: |
-          set -e
-          sdkmanager --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-33" "build-tools;36.1.0" "ndk;25.2.9519653"
-
-      - name: Symlink SDK to Buildozer expected path
-        run: |
-          ANDROID_SDK_ROOT="$RUNNER_TEMP/android-sdk"
-          BUILDOBZER_SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
-          mkdir -p "$(dirname "$BUILDOBZER_SDK_DIR")"
-          ln -sfn "$ANDROID_SDK_ROOT" "$BUILDOBZER_SDK_DIR"
-
-      - name: Fix sdkmanager path for Buildozer
-        run: |
-          mkdir -p $HOME/.buildozer/android/platform/android-sdk/tools
-          ln -s $ANDROID_SDK_ROOT/cmdline-tools/latest $HOME/.buildozer/android/platform/android-sdk/tools
-
-      - name: Install Python build tools (buildozer, cython)
-        run: |
-          python -m pip install --upgrade pip
-          pip install --upgrade setuptools wheel
-          pip install buildozer==1.5.0 cython==0.29.36
-
-      - name: Create buildozer.spec if missing
-        run: |
-          if [ ! -f buildozer.spec ]; then
-            buildozer init
-          fi
-
-      - name: Run Buildozer (build debug)
-        env:
-          ANDROID_SDK_ROOT: ${{ runner.temp }}/android-sdk
-          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
-        run: |
-          export PATH="$RUNNER_TEMP/android-sdk/cmdline-tools/latest/bin:$RUNNER_TEMP/android-sdk/platform-tools:$PATH"
-          buildozer -v android debug
-
-      - name: Upload APK artifact (v4)
-        uses: actions/upload-artifact@v4
-        with:
-          name: AkhiManga-apk
-          path: bin/*.apk
+          ~/.local/bin/buildozer android debug
           
