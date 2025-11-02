@@ -13,15 +13,15 @@ jobs:
     - name: Checkout repo
       uses: actions/checkout@v4
 
-    - name: Install APT packages
+    - name: Install system dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y --no-install-recommends \
-          curl unzip openjdk-17-jdk python3-pip python3-setuptools git zip wget
+          curl unzip openjdk-17-jdk python3-pip python3-setuptools git zip wget build-essential
 
     - name: Show Java version
       run: |
-        java -version || true
+        java -version
         echo "JAVA_HOME may be /usr/lib/jvm/java-17-openjdk-amd64"
 
     - name: Prepare Android SDK folders
@@ -39,18 +39,16 @@ jobs:
       run: |
         export ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk
         unzip -q $RUNNER_TEMP/commandlinetools.zip -d "$ANDROID_SDK_ROOT/cmdline-tools"
-        if [ -d "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" ]; then
-          mv "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest"
-        else
-          mv "$ANDROID_SDK_ROOT/cmdline-tools/"* "$ANDROID_SDK_ROOT/cmdline-tools/latest" || true
-        fi
+        mv "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest" || true
 
     - name: Accept licenses and install SDK components
       run: |
         export ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk
         export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
-        yes | sdkmanager --licenses
-        sdkmanager "platform-tools" "platforms;android-33" "build-tools;36.1.0"
+        # قبول جميع التراخيص
+        yes | sdkmanager --sdk_root=$ANDROID_SDK_ROOT --licenses
+        # تثبيت الأدوات المطلوبة
+        sdkmanager --sdk_root=$ANDROID_SDK_ROOT "platform-tools" "platforms;android-33" "build-tools;36.1.0" "ndk;25.2.9519653"
 
     - name: Install Python build tools
       run: |
@@ -61,7 +59,6 @@ jobs:
       run: |
         if [ ! -f buildozer.spec ]; then
           buildozer init
-        fi
 
     - name: Build APK (debug) with Buildozer
       run: |
