@@ -24,31 +24,57 @@ jobs:
         java -version
         echo "JAVA_HOME may be /usr/lib/jvm/java-17-openjdk-amd64"
 
-    - name: Prepare Android SDK folders
+    - name: Prepare Android SDK folders (use RUNNER_TEMP)
       run: |
-        export ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk
+        export ANDROID_SDK_ROOT="$RUNNER_TEMP/android-sdk"
         mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+        echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
 
     - name: Download Android commandline tools
       run: |
-        export ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk
+        export ANDROID_SDK_ROOT="$RUNNER_TEMP/android-sdk"
         cd $RUNNER_TEMP
         curl -fSL "https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip" -o "commandlinetools.zip"
 
     - name: Unpack commandline tools
       run: |
-        export ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk
+        export ANDROID_SDK_ROOT="$RUNNER_TEMP/android-sdk"
         unzip -q $RUNNER_TEMP/commandlinetools.zip -d "$ANDROID_SDK_ROOT/cmdline-tools"
-        mv "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest" || true
+        # normalize folder to "latest"
+        if [ -d "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" ]; then
+          mv "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+        else
+          mv "$ANDROID_SDK_ROOT/cmdline-tools/"* "$ANDROID_SDK_ROOT/cmdline-tools/latest" || true
+        fi
+        ls -la "$ANDROID_SDK_ROOT/cmdline-tools/latest"
 
-    - name: Accept licenses and install SDK components
+    - name: Add sdkmanager to PATH and accept licenses, install components
       run: |
-        export ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk
+        export ANDROID_SDK_ROOT="$RUNNER_TEMP/android-sdk"
         export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
-        # قبول جميع تراخيص SDK
-        yes | sdkmanager --sdk_root=$ANDROID_SDK_ROOT --licenses
-        # تثبيت الأدوات المطلوبة
-        sdkmanager --sdk_root=$ANDROID_SDK_ROOT "platform-tools" "platforms;android-33" "build-tools;36.1.0" "ndk;25.2.9519653"
+        sdkmanager --version
+        # قبول كل التراخيص المرتبطة بالمجلد
+        yes | sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --licenses || true
+        # تثبيت الأدوات المطلوبة (عدل الأرقام إن رغبت)
+        sdkmanager --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-33" "build-tools;36.1.0" "ndk;25.2.9519653"
+
+    - name: Create stable SDK location for Buildozer and symlink
+      run: |
+        export ANDROID_SDK_ROOT="$RUNNER_TEMP/android-sdk"
+        # مكان Buildozer المتوقّع
+        BUILDOBZER_SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
+        mkdir -p "$(dirname "$BUILDOBZER_SDK_DIR")"
+        # إن وُجد مجلد قديم نحذفه أو نزيله قبل الربط (بحرص)
+        if [ -L "$BUILDOBZER_SDK_DIR" ]; then
+          rm -f "$BUILDOBZER_SDK_DIR"
+        fi
+        if [ -d "$BUILDOBZER_SDK_DIR" ]; then
+          rm -rf "$BUILDOBZER_SDK_DIR"
+        fi
+        # أنشئ الوصلة (symlink) من المكان الذي قامنا بتثبيت SDK فيه إلى المكان الذي يتوقعه Buildozer
+        ln -s "$ANDROID_SDK_ROOT" "$BUILDOBZER_SDK_DIR"
+        echo "Created symlink: $BUILDOBZER_SDK_DIR -> $ANDROID_SDK_ROOT"
+        ls -la "$(dirname "$BUILDOBZER_SDK_DIR")"
 
     - name: Install Python build tools
       run: |
@@ -63,9 +89,10 @@ jobs:
 
     - name: Build APK (debug) with Buildozer
       run: |
-        export ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk
+        export ANDROID_SDK_ROOT="$RUNNER_TEMP/android-sdk"
         export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
         export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+        echo "Starting buildozer..."
         buildozer -v android debug
 
     - name: Upload APK artifact
