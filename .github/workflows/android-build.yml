@@ -18,9 +18,9 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y --no-install-recommends \
           python3-pip python3-setuptools git zip unzip openjdk-17-jdk build-essential \
-          libssl-dev libffi-dev libsqlite3-dev libncurses6 libncurses6-dev wget
+          libssl-dev libffi-dev libsqlite3-dev libncurses-dev wget
 
-    - name: Show Java version
+    - name: Show Java info
       run: |
         java -version || true
         echo "JAVA_HOME:"
@@ -39,11 +39,9 @@ jobs:
 
     - name: Build APK (debug)
       env:
-        ANDROIDSDK: ${{ runner.temp }}/android-sdk
+        JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
       run: |
-        # set JAVA_HOME if needed (path may vary by runner)
-        export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 || true
-        echo "JAVA_HOME is $JAVA_HOME"
+        echo "Using JAVA_HOME=$JAVA_HOME"
         buildozer -v android debug
 
     - name: Upload APK artifact
