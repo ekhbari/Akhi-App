@@ -45,7 +45,7 @@ jobs:
       run: |
         export ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk
         export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
-        # قبول جميع التراخيص
+        # قبول جميع تراخيص SDK
         yes | sdkmanager --sdk_root=$ANDROID_SDK_ROOT --licenses
         # تثبيت الأدوات المطلوبة
         sdkmanager --sdk_root=$ANDROID_SDK_ROOT "platform-tools" "platforms;android-33" "build-tools;36.1.0" "ndk;25.2.9519653"
@@ -59,6 +59,7 @@ jobs:
       run: |
         if [ ! -f buildozer.spec ]; then
           buildozer init
+        fi
 
     - name: Build APK (debug) with Buildozer
       run: |
