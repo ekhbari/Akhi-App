@@ -1,15 +1,14 @@
 [app]
 title = Akhi Manga
-package.name = akhimanga
-package.domain = org.akhi
-source.dir = .
-source.include_exts = py,png,jpg,kv,ini,md
+package.name = akhi_manga
+package.domain = org.ekhbari
+source.include_exts = py,png,jpg,kv,atlas
 version = 0.1
-requirements = python3,kivy,kivymd,requests,cloudscraper,beautifulsoup4,lxml
-orientation = portrait
-iron = android
-fullscreen = 0
+requirements = python3,kivy==2.2.1,requests
+
+[buildozer]
+log_level = 2
+android.archs = arm64-v8a,armeabi-v7a
 android.api = 33
-android.minapi = 21
-android.ndk = 23b
-android.arch = armeabi-v7a
+android.ndk = 25.2.9519653
+android.sdk = 36.1.0
