@@ -1,0 +1,6 @@
+kivy==2.1.0
+kivymd==1.1.1
+requests==2.31.0
+cloudscraper==1.2.73
+beautifulsoup4==4.12.2
+lxml==4.9.3
