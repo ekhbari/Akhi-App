@@ -5,12 +5,6 @@ on:
     branches: ["main"]
   workflow_dispatch:
 
-env:
-  ANDROID_SDK_ROOT: ${{ runner.temp }}/android-sdk  # مسار SDK مؤقت داخل runner
-  ANDROID_CMDLINE_TOOLS_ZIP: commandlinetools-linux-9477386_latest.zip
-  ANDROID_API: "33"
-  ANDROID_BUILD_TOOLS: "36.1.0"
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -32,45 +26,33 @@ jobs:
 
     - name: Prepare Android SDK folders
       run: |
-        mkdir -p "$ANDROID_SDK_ROOT"
+        export ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk
         mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
 
     - name: Download Android commandline tools
       run: |
+        export ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk
         cd $RUNNER_TEMP
-        # حاول تحميل نسخة حديثة؛ إن تغيّرت قد تحتاج لتحديث اسم الملف أعلاه
-        curl -fSL "https://dl.google.com/android/repository/${{ env.ANDROID_CMDLINE_TOOLS_ZIP }}" -o "${{ env.ANDROID_CMDLINE_TOOLS_ZIP }}"
+        curl -fSL "https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip" -o "commandlinetools.zip"
 
     - name: Unpack commandline tools
       run: |
-        unzip -q $RUNNER_TEMP/${{ env.ANDROID_CMDLINE_TOOLS_ZIP }} -d "$ANDROID_SDK_ROOT/cmdline-tools"
-        # بعض الحزم تضع مجلداً باسم 'cmdline-tools' داخلياً — ضعها في 'latest'
+        export ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk
+        unzip -q $RUNNER_TEMP/commandlinetools.zip -d "$ANDROID_SDK_ROOT/cmdline-tools"
         if [ -d "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" ]; then
           mv "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest"
         else
-          # إن كانت الملفات مباشرة، حاول إعادة التسمية
           mv "$ANDROID_SDK_ROOT/cmdline-tools/"* "$ANDROID_SDK_ROOT/cmdline-tools/latest" || true
         fi
-        ls -la "$ANDROID_SDK_ROOT/cmdline-tools/latest"
 
-    - name: Add sdkmanager to PATH and accept licenses
-      env:
-        PATH: ${{ env.ANDROID_SDK_ROOT }}/cmdline-tools/latest/bin:$PATH
+    - name: Accept licenses and install SDK components
       run: |
+        export ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk
         export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
-        sdkmanager --version
-        yes | sdkmanager --licenses || true
+        yes | sdkmanager --licenses
+        sdkmanager "platform-tools" "platforms;android-33" "build-tools;36.1.0"
 
-    - name: Install Android SDK components (platform-tools, platforms, build-tools, ndk)
-      env:
-        PATH: ${{ env.ANDROID_SDK_ROOT }}/cmdline-tools/latest/bin:$PATH
-      run: |
-        export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
-        sdkmanager "platform-tools" "platforms;android-${{ env.ANDROID_API }}" "build-tools;${{ env.ANDROID_BUILD_TOOLS }}" || true
-        # إن رغبت بتثبيت NDK ضع السطر التالي (إلغاء التعليق):
-        # sdkmanager "ndk;23.1.7779620"
-
-    - name: Install Python build tools (buildozer, cython)
+    - name: Install Python build tools
       run: |
         python3 -m pip install --upgrade pip
         pip install buildozer cython==0.29.36
@@ -80,16 +62,12 @@ jobs:
         if [ ! -f buildozer.spec ]; then
           buildozer init
         fi
-        sed -n '1,200p' buildozer.spec || true
 
     - name: Build APK (debug) with Buildozer
-      env:
-        PATH: ${{ env.ANDROID_SDK_ROOT }}/cmdline-tools/latest/bin:$PATH
-        ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
-        JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
       run: |
+        export ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk
         export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
-        echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+        export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
         buildozer -v android debug
 
     - name: Upload APK artifact
