@@ -1,0 +1,40 @@
+# .github/workflows/android-build.yml
+name: Build Android APK
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install system deps
+      run: |
+        sudo apt update
+        sudo apt install -y python3-pip python3-setuptools git zip unzip openjdk-17-jdk build-essential libncurses5
+
+    - name: Install Python deps
+      run: |
+        pip install --upgrade pip
+        pip install buildozer cython==0.29.36
+
+    - name: Buildozer init (if needed)
+      run: |
+        if [ ! -f buildozer.spec ]; then
+          buildozer init
+        fi
+
+    - name: Build APK (debug)
+      run: |
+        buildozer -v android debug
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: AkhiManga-apk
+        path: bin/*.apk
+        
