@@ -61,7 +61,6 @@ jobs:
           ANDROID_SDK_ROOT: ${{ runner.temp }}/android-sdk
         run: |
           set -e
-          sdkmanager --version
           yes | sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --licenses || true
 
       - name: Install SDK components (platform-tools, platforms, build-tools, ndk)
@@ -77,6 +76,11 @@ jobs:
           BUILDOBZER_SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
           mkdir -p "$(dirname "$BUILDOBZER_SDK_DIR")"
           ln -sfn "$ANDROID_SDK_ROOT" "$BUILDOBZER_SDK_DIR"
+
+      - name: Fix sdkmanager path for Buildozer
+        run: |
+          mkdir -p $HOME/.buildozer/android/platform/android-sdk/tools
+          ln -s $ANDROID_SDK_ROOT/cmdline-tools/latest $HOME/.buildozer/android/platform/android-sdk/tools
 
       - name: Install Python build tools (buildozer, cython)
         run: |
